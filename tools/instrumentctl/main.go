@@ -274,7 +274,8 @@ const (
 	addrTick0 = 0x0100 // 60 ticks at 0x0100..0x013B; index 0..5
 	addrTri   = 0x0140 // top reference triangle: 0 off,1 white,2 green,3 red
 	addrMode  = 0x0141 // mode label: 0 RPM,1 COG HOLD,2 TWA HOLD,3 AP HOLD,4 OFF
-	addrSym   = 0x0142 // symbol: 0 gauge,1 autopilot,2 wind
+	addrSym   = 0x0142 // symbol slot (symNames)
+	addrUnit  = 0x0143 // unit slot (unitNames)
 	addrValue = 0x0150 // 4-digit value 0..9999
 	addrScreenRing = 0x0160 // ring behind ticks: 0 tach,1 rainbow,2 coolwarm,3 white,4 cyan,5 green,6 amber,7 red,8 blue,9 magenta,10 off
 	nTicks    = 60
@@ -326,23 +327,39 @@ const (
 	stylePointer                  // single marker tick at the value's angle (compass/heading)
 )
 
+// Names mirror gen_canvas.py MODES / SYMBOLS / UNITS — looked up by name, so reordering
+// the baked canvas lists can never desync the driver.
+var modeNames = []string{"RPM", "DEPTH", "SPEED", "SOG", "STW", "TEMP", "FUEL", "WIND", "AWA", "TWA", "AWS", "TWS", "HDG", "COG", "CRS", "VOLTS", "AMPS", "TRIP", "OFF"}
+var symNames = []string{"gauge", "depth", "speed", "temp", "fuel", "wind", "autopilot", "battery", "anchor", "engine", "water", "gps"}
+var unitNames = []string{"", "\u00b0C", "\u00b0F", "\u00b0", "%", "kn", "V", "A", "m", "ft", "nm", "rpm"}
+
+func nameIdx(list []string, name string) int {
+	for i, n := range list {
+		if n == name {
+			return i
+		}
+	}
+	return 0
+}
+
 type instrument struct {
-	mode, symbol, ring int
+	mode, symbol, unit string // looked up in modeNames / symNames / unitNames
+	ring               int
 	min, max           float64
 	zones              []zone
 	sweep              float64 // 270 = gauge (gap at bottom) · 360 = compass
 	style              instStyle
-	numDiv             float64 // displayed number = value / numDiv
+	numDiv             float64
 }
 
-// The instrument set. Add an entry and it's immediately drivable (-instrument NAME).
+// The instrument set — add an entry and it's immediately drivable (-instrument NAME).
 var instruments = map[string]instrument{
-	"rpm": {mode: 0, symbol: 0, ring: ringOff, min: 0, max: 3000, sweep: 270, style: styleFill, numDiv: 1,
-		zones: []zone{{0, 2000, tkWhite}, {2000, 2500, tkYellow}, {2500, 3000, tkRed}}},
-	"temp": {mode: 3, symbol: 3, ring: ringOff, min: 40, max: 90, sweep: 270, style: styleFill, numDiv: 1,
-		zones: []zone{{40, 50, tkWhite}, {50, 70, tkGreen}, {70, 80, tkYellow}, {80, 90, tkRed}}},
-	"fuel": {mode: 4, symbol: 4, ring: ringOff, min: 0, max: 100, sweep: 270, style: styleFill, numDiv: 1,
-		zones: []zone{{0, 10, tkRed}, {10, 25, tkYellow}, {25, 100, tkWhite}}},
+	"rpm":   {mode: "RPM", symbol: "gauge", unit: "rpm", ring: ringOff, min: 0, max: 3000, sweep: 270, style: styleFill, numDiv: 1, zones: []zone{{0, 2000, tkWhite}, {2000, 2500, tkYellow}, {2500, 3000, tkRed}}},
+	"temp":  {mode: "TEMP", symbol: "temp", unit: "\u00b0C", ring: ringOff, min: 40, max: 90, sweep: 270, style: styleFill, numDiv: 1, zones: []zone{{40, 50, tkWhite}, {50, 70, tkGreen}, {70, 80, tkYellow}, {80, 90, tkRed}}},
+	"fuel":  {mode: "FUEL", symbol: "fuel", unit: "%", ring: ringOff, min: 0, max: 100, sweep: 270, style: styleFill, numDiv: 1, zones: []zone{{0, 10, tkRed}, {10, 25, tkYellow}, {25, 100, tkWhite}}},
+	"depth": {mode: "DEPTH", symbol: "depth", unit: "m", ring: ringOff, min: 0, max: 100, sweep: 270, style: styleFill, numDiv: 1, zones: []zone{{0, 3, tkRed}, {3, 10, tkYellow}, {10, 100, tkWhite}}},
+	"speed": {mode: "SPEED", symbol: "speed", unit: "kn", ring: ringOff, min: 0, max: 30, sweep: 270, style: styleFill, numDiv: 1, zones: []zone{{0, 30, tkWhite}}},
+	"volts": {mode: "VOLTS", symbol: "battery", unit: "V", ring: ringOff, min: 10, max: 15, sweep: 270, style: styleFill, numDiv: 1, zones: []zone{{10, 12, tkRed}, {12, 12.5, tkYellow}, {12.5, 15, tkGreen}}},
 }
 
 func zoneColor(zs []zone, v float64) int {
@@ -378,8 +395,9 @@ func tickFrac(i int, sweep float64) (float64, bool) {
 
 // compose renders one instrument at `value` onto the canvas (change-gated ticks).
 func (c *Canvas) compose(in instrument, value float64) {
-	c.set(addrMode, in.mode)
-	c.set(addrSym, in.symbol)
+	c.set(addrMode, nameIdx(modeNames, in.mode))
+	c.set(addrSym, nameIdx(symNames, in.symbol))
+	c.set(addrUnit, nameIdx(unitNames, in.unit))
 	c.set(addrScreenRing, in.ring)
 	c.set(addrTri, triOff) // no top triangle on these gauges
 	for i := 0; i < nTicks; i++ {
@@ -423,20 +441,14 @@ func (c *Canvas) animate(name string, in instrument) {
 	fmt.Println("\n[instrument] done")
 }
 
-// autopilot mode-label indices (gen_canvas MODES: COG=6, TWA=7, CRS=8, OFF=9).
-var apMode = map[string]int{"off": 9, "cog": 6, "twa": 7, "crs": 8}
-
 // composeAutopilot renders the heading/autopilot instrument: a 270deg ring of DIM
 // target-colour ticks (red = port / green = starboard / magenta = CRS), 2 BRIGHT
 // ticks at the desired heading, and a white lubber triangle at top-dead-centre
 // (= current heading). Off mode shows a plain grey ring.
 func (c *Canvas) composeAutopilot(mode string, desired, current float64) {
-	mi, ok := apMode[mode]
-	if !ok {
-		mi = apMode["off"]
-	}
-	c.set(addrMode, mi)
-	c.set(addrSym, 6)        // autopilot symbol
+	c.set(addrMode, nameIdx(modeNames, strings.ToUpper(mode)))
+	c.set(addrSym, nameIdx(symNames, "autopilot"))
+	c.set(addrUnit, nameIdx(unitNames, "\u00b0"))
 	c.set(addrScreenRing, ringOff)
 	c.set(addrTri, triWhite) // white triangle top-dead-centre = current heading
 
@@ -567,6 +579,7 @@ func main() {
 	autopilot := flag.String("autopilot", "", "autopilot mode: off|cog|twa|crs")
 	heading := flag.Float64("heading", math.NaN(), "autopilot desired heading (deg)")
 	current := flag.Float64("current", 0, "autopilot current heading (deg, 0 = top-dead-centre)")
+	ping := flag.Bool("ping", false, "write a harmless command and print any device reply (verifies device->host RX path)")
 	send := flag.String("send", "", "raw payload hex (cmd+addr+data), e.g. \"10 1FF1 0001\"")
 	listen := flag.Bool("listen", false, "listen and decode incoming frames")
 	dry := flag.Bool("dry", false, "print frames without opening a port")
@@ -599,6 +612,18 @@ func main() {
 	}
 
 	switch {
+	case *ping:
+		l.send("bright", writeCmd(addrBright, 0x3F))
+		if l.port != nil {
+			l.port.SetReadTimeout(1500 * time.Millisecond)
+			buf := make([]byte, 256)
+			n, _ := l.port.Read(buf)
+			if n > 0 {
+				fmt.Printf("  <- %d bytes: % X   device->host OK — input will work once reportToHost is enabled\n", n, buf[:n])
+			} else {
+				fmt.Println("  <- silent. Check adapter RXD <- CN2 pin4(TX), or the module isn't ACKing over CN2.")
+			}
+		}
 	case *screenring >= 0:
 		newCanvas(l).set(addrScreenRing, *screenring)
 		fmt.Printf("[screenring] set to %d\n", *screenring)

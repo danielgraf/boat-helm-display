@@ -53,8 +53,9 @@ TICK_COLORS = [
     ("off",      None),
 ]
 TRI_COLORS = [("white", (232,232,232)), ("green",(62,199,107)), ("red",(255,59,48)), ("off", None)]
-MODES   = ["RPM", "DEPTH", "SPEED", "TEMP", "FUEL", "WIND", "COG", "TWA", "CRS", "OFF"]
-SYMBOLS = ["gauge", "depth", "speed", "temp", "fuel", "wind", "autopilot"]
+MODES   = ["RPM","DEPTH","SPEED","SOG","STW","TEMP","FUEL","WIND","AWA","TWA","AWS","TWS",
+           "HDG","COG","CRS","VOLTS","AMPS","TRIP","OFF"]
+SYMBOLS = ["gauge","depth","speed","temp","fuel","wind","autopilot","battery","anchor","engine","water","gps"]
 
 def font(sz, bold=True):
     names = (["Arial Bold.ttf","Helvetica.ttc"] if bold else ["Arial.ttf","Helvetica.ttc"])
@@ -158,7 +159,34 @@ def gen_symbols():
             d.line([(29,20),(29,11)], fill=C, width=2)       # hose up
             d.line([(29,11),(26,11)], fill=C, width=2)       # nozzle
             d.line([(10,36),(26,36)], fill=C, width=2)
+        elif name == "battery":
+            d.rectangle([10,15,30,33], outline=C, width=2); d.rectangle([30,20,33,28], fill=C)
+            d.rectangle([13,18,19,30], fill=C)
+        elif name == "anchor":
+            d.ellipse([17,7,23,13], outline=C, width=2); d.line([(20,12),(20,33)], fill=C, width=2)
+            d.line([(13,19),(27,19)], fill=C, width=2); d.arc([9,20,31,37], 20, 160, fill=C, width=2)
+        elif name == "engine":
+            d.rectangle([9,16,27,32], outline=C, width=2); d.rectangle([27,20,33,28], outline=C, width=2)
+            d.line([(14,16),(14,11)], fill=C, width=2); d.line([(14,11),(22,11)], fill=C, width=2)
+        elif name == "water":
+            for yy in (15,23,31):
+                d.line([(8,yy),(13,yy-3),(18,yy),(23,yy-3),(28,yy),(32,yy-3)], fill=C, width=2)
+        elif name == "gps":
+            d.ellipse([12,8,28,24], outline=C, width=2); d.ellipse([17,13,23,19], fill=C)
+            d.polygon([(15,21),(25,21),(20,34)], fill=C)
         ids[i] = save_icon(im, 930 + i, f"sym{i}")
+    return ids
+
+UNITS = ["", "\u00b0C", "\u00b0F", "\u00b0", "%", "kn", "V", "A", "m", "ft", "nm", "rpm"]
+UNIT_W, UNIT_H = 56, 20
+def gen_units():
+    f = font(16, bold=False); ids = {}
+    for i, txt in enumerate(UNITS):
+        im = Image.new("RGBA", (UNIT_W, UNIT_H), (0, 0, 0, 0))
+        if txt:
+            d = ImageDraw.Draw(im); w = d.textbbox((0,0), txt, font=f)[2]
+            d.text(((UNIT_W-w)/2, 1), txt, font=f, fill=(150,160,175))
+        ids[i] = save_icon(im, 970 + i, f"unit{i}")
     return ids
 
 # ---- black page background --------------------------------------------------
@@ -202,7 +230,7 @@ def tick_xy(i):
     a = math.radians(-90 + i * 360.0 / N)
     return round(CX + R_TICK*math.cos(a) - TICK_S/2), round(CY + R_TICK*math.sin(a) - TICK_S/2)
 
-def gen_cfg(ring, ticks, tri, modes, syms):
+def gen_cfg(ring, ticks, tri, modes, syms, units):
     recs = []
     # UI_Editor identifies widget TYPE by the name prefix, so every Icon widget MUST be
     # named icon_<n> (unique per page) or the editor silently drops it on load.
@@ -226,14 +254,16 @@ def gen_cfg(ring, ticks, tri, modes, syms):
     recs.append(ic(0x0141, round(CX-MODE_W/2), 92, MODE_W, MODE_H, modes[0], modes[len(MODES)-1]))
     # 12-o'clock symbol slot
     recs.append(ic(0x0142, round(CX-SYM/2), 50, SYM, SYM, syms[0], syms[len(SYMBOLS)-1]))
+    # units slot (below the value)
+    recs.append(ic(0x0143, round(CX-UNIT_W/2), 156, UNIT_W, UNIT_H, units[0], units[len(UNITS)-1]))
     # 4-digit value (reuse existing 36px digit images 0200..0209)
     recs.append("pngNumber_0:0xFFFF,0x0150,2,72,116,96,36,4,0,short,Middle,"
                 "0200_digit36.png,0209_digit36.png,24,pngNumber_0,Disable,0xFFFF,1;")
     # neutralized encoder (stay on page 0)
     enc = ("encoder_0:0x00F0,0,0,240,240,encoder_0,1,Page0000," + "0xFFFF,"*15 +
-           "0xFFFF,Disable;NULL;NULL;NULL;1,Page0000," + "0xFFFF,"*15 +
-           "0xFFFF,Disable;1,Page0000," + "0xFFFF,"*15 +
-           "0xFFFF,Disable;NULL;NULL;NULL;NULL;NULL;NULL;NULL;NULL;NULL;NULL;")
+           "0xFFFF,Enable;NULL;NULL;NULL;1,Page0000," + "0xFFFF,"*15 +
+           "0xFFFF,Enable;1,Page0000," + "0xFFFF,"*15 +
+           "0xFFFF,Enable;NULL;NULL;NULL;NULL;NULL;NULL;NULL;NULL;NULL;NULL;")
     recs.append(enc)
     with open(os.path.join(PLUG, "Page0000.cfg"), "w", encoding="utf-8-sig") as f:
         f.write("\n".join(recs) + "\n")
@@ -263,8 +293,8 @@ def clean_generated():
 
 def main():
     clean_generated()
-    ring = gen_ring(); ticks = gen_ticks(); tri = gen_triangle(); modes = gen_modes(); syms = gen_symbols()
-    gen_background(); gen_cfg(ring, ticks, tri, modes, syms); gen_uiprj(); write_map(ticks, tri, modes, syms)
+    ring = gen_ring(); ticks = gen_ticks(); tri = gen_triangle(); modes = gen_modes(); syms = gen_symbols(); units = gen_units()
+    gen_background(); gen_cfg(ring, ticks, tri, modes, syms, units); gen_uiprj(); write_map(ticks, tri, modes, syms)
     print(f"canvas compiled: {N} ticks + triangle + symbol + mode + 4-digit value")
     print("assets -> build/Icon (0500-0532) + build/Picture/0100_canvas.png")
     print("cfg -> build/Plugin/Page0000.cfg ; project -> build/boat-helm.uiprj ; map -> build/canvas_map.csv")
