@@ -1,0 +1,26 @@
+Page,WidgetName,Name    ,Header,Length,Cmd,Addr,Data,CRC
+-,SystemFunction,Switch Page,5AA5,07,10,7000,0000,FF03
+-,SystemFunction,Brightness CTRL,5AA5,07,10,7001,003F,EED3
+-,SystemFunction,Year,5AA5,07,10,7002,001A,DF08
+-,SystemFunction,Month,5AA5,07,10,7003,0005,CF00
+-,SystemFunction,Day,5AA5,07,10,7004,0014,BECD
+-,SystemFunction,Hour,5AA5,07,10,7005,0012,6F0F
+-,SystemFunction,Minute,5AA5,07,10,7006,0029,DEDC
+-,SystemFunction,Second,5AA5,07,10,7007,0029,8F1C
+-,SystemFunction,Refresh time,5AA5,07,10,7008,0000,7EC1
+-,SystemFunction,Play music,5AA5,07,10,700A,0000,DF01
+-,SystemFunction,Volume CTRL,5AA5,07,10,700B,0000,8EC1
+-,SystemFunction,Open pop_window,5AA5,07,10,700D,0000,6EC0
+-,SystemFunction,Auto-dimming,5AA5,07,10,700E,0000,9EC0
+-,SystemFunction,Dimming level,5AA5,07,10,700F,0014,CF0F
+-,SystemFunction,Time to enter sleep,5AA5,07,10,7010,012C,FE8B
+-,SystemFunction,Multi-language,5AA5,07,10,703F,0000,CF0F
+Page0,needle_0,needle_0,5AA5,07,10,0011,002D,75DB
+Page1,needle_0,needle_0,5AA5,07,10,0021,002D,75D4
+Page2,needle_0,needle_0,5AA5,07,10,0031,002D,7411
+Page3,needle_0,needle_0,5AA5,07,10,0041,00B4,B5A0
+Page3,pngNumber_0,pngNumber_0,5AA5,07,10,0042,0018,45DD
+Page4,needle_0,needle_0,5AA5,07,10,0051,00B4,B465
+Page4,needle_1,needle_1,5AA5,07,10,0053,00B4,15A5
+Page4,pngNumber_0,pngNumber_0,5AA5,07,10,0052,0018,4418
+Page4,pngNumber_1,pngNumber_1,5AA5,07,10,0054,000F,E417

@@ -1,0 +1,8 @@
+slot,addr,indices
+ticks(0..59),0x0100..0x013B,"0=off,1=grey,2=white,3=green,4=yellow,5=red"
+triTop,0x0140,"0=off,1=white,2=green,3=red"
+modeLbl,0x0141,0=RPM|1=DEPTH|2=SPEED|3=TEMP|4=FUEL|5=WIND|6=COG|7=TWA|8=CRS|9=OFF
+symSlot,0x0142,0=gauge|1=depth|2=speed|3=temp|4=fuel|5=wind|6=autopilot
+value,0x0150,0..9999
+screenRing,0x0160,0=tach|1=rainbow|2=coolwarm|3=white|4=cyan|5=green|6=amber|7=red|8=blue|9=magenta|10=off
+ledRing,0x1FF1,"0 off,1 blue,2 green,4 red"
