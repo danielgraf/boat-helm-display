@@ -4,10 +4,11 @@
 // isolates what a source change moved in the bytes, `strings` finds the ini/version
 // metadata. Generation is grown incrementally from what these teach us.
 //
-//	bintool dump  <bin>            structure: section directory + metadata
-//	bintool diff  <a> <b>          byte diff (16-byte rows) + header-word deltas
-//	bintool words <bin> [n]        first n uint32 words (LE) as hex+dec
-//	bintool strings <bin> [min]    printable ASCII runs (ini/version/asset names)
+//	bintool dump     <bin>         structure: section directory + metadata
+//	bintool sections <bin>         decoded named sections (Page/Font/MultiLang/Gif/Picture/Icon)
+//	bintool diff     <a> <b>       byte diff (16-byte rows) + header-word deltas
+//	bintool words    <bin> [n]     first n uint32 words (LE) as hex+dec
+//	bintool strings  <bin> [min]   printable ASCII runs (ini/version/asset names)
 package main
 
 import (
@@ -76,6 +77,70 @@ func dumpStrings(b []byte, minLen, base int) {
 		}
 	}
 	emit(len(b))
+}
+
+// sections decodes the header directory into named sections. The slot→section map
+// is CONFIRMED against the Shower demo bin, whose counts match its Make_info.txt build
+// log exactly (8 pages, 7 fonts, 1 gif, 310 icons, MultiLang @ 0x1E05F). See docs/BIN_FORMAT.md.
+// Each slot is a {addr, count} uint32-LE pair at a fixed offset; a section spans from its
+// addr to the next-higher section addr (last runs to EOF).
+func sections(b []byte) {
+	type slot struct {
+		off   int
+		name  string
+		hasCt bool // whether the second word is a meaningful count
+	}
+	slots := []slot{
+		{0x00, "Picture", false},
+		{0x08, "Page", true},
+		{0x10, "Font", true},
+		{0x18, "MultiLang", false},
+		{0x20, "PagePicMap", true},
+		{0x28, "Gif", true},
+		{0x30, "Icon", true}, // count = maxIconID+1 (sparse), not file count
+	}
+	fmt.Printf("file: %d bytes (0x%X)\n\n", len(b), len(b))
+	// Collect section addresses (for size = next addr - this addr).
+	type sec struct {
+		name        string
+		addr, count uint32
+		hasCt       bool
+	}
+	var secs []sec
+	for _, s := range slots {
+		a, c := u32(b, s.off), u32(b, s.off+4)
+		if a == 0 || !looksAddr(a, len(b)) {
+			continue
+		}
+		secs = append(secs, sec{s.name, a, c, s.hasCt})
+	}
+	sort.Slice(secs, func(i, j int) bool { return secs[i].addr < secs[j].addr })
+	fmt.Println("=== decoded sections (by file order) ===")
+	fmt.Printf("  %-11s %-10s %-10s %s\n", "section", "addr", "size", "count")
+	for i, s := range secs {
+		end := uint32(len(b))
+		if i+1 < len(secs) {
+			end = secs[i+1].addr
+		}
+		ct := ""
+		if s.hasCt {
+			ct = fmt.Sprintf("%d", s.count)
+			if s.name == "Icon" {
+				ct += " (maxID+1)"
+			}
+		}
+		fmt.Printf("  %-11s 0x%08X 0x%08X %s\n", s.name, s.addr, end-s.addr, ct)
+	}
+	// End/size pointer sanity (slot 0x60 = filesize in newer builds).
+	if end := u32(b, 0x60); end != 0 {
+		match := ""
+		if int(end) == len(b) {
+			match = "  == filesize ✓"
+		} else {
+			match = "  != filesize (older/dirty build?)"
+		}
+		fmt.Printf("\n  [0x60] end-pointer = 0x%08X%s\n", end, match)
+	}
 }
 
 func words(b []byte, n int) {
@@ -158,6 +223,8 @@ func main() {
 	switch os.Args[1] {
 	case "dump":
 		dump(read(os.Args[2]))
+	case "sections":
+		sections(read(os.Args[2]))
 	case "diff":
 		if len(os.Args) < 4 {
 			fmt.Println("usage: bintool diff <a> <b>")

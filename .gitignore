@@ -6,8 +6,10 @@ build/Plugin/*.bak
 build/Plugin/*.bak1
 build/Plugin/LastPage.txt
 
-# Compiled Go binary (built from tools/instrumentctl/ source)
+# Compiled Go binaries (built from source under tools/*/)
 tools/instrumentctl/instrumentctl
+tools/flashprobe/flashprobe
+tools/bintool/bintool
 
 # OS / editor / Python cruft
 .DS_Store
