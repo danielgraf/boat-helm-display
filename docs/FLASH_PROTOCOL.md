@@ -37,10 +37,14 @@ the one step that makes it exact (a serial capture). Companion tool: `tools/flas
   256-byte page, 16 MB`). Erase is by sector or whole-chip.
 
 ## NOT yet exact (do not hardcode from static RE — one misread already caught)
-The precise **opcode byte values**, the **exact prefix/length**, the **ACK/terminator**, and
-the **flash CRC algorithm** (the `Flash code,CRC=0x...` the tool computes over the image).
+The precise **opcode byte values**, the **exact prefix/length**, and the **ACK/terminator**.
 Static x86 gives the skeleton but is error-prone on these specifics — e.g. the arg to the
 send routine turned out to be a boot-mode *flag* (0/1), not the opcode.
+
+**Flash CRC — SOLVED** (from the boot ROM, see `docs/BOOTROM_RE.md`): standard **CRC-32,
+reflected poly `0xEDB88320`, bitwise** (constant at boot-ROM offset 0x11c4). This is the
+`Flash code,CRC=0x...` the tool checks. Reference: `clean-1039.bin` → CRC-32 `0xB078B128`
+(validate against the flasher's reported value on the next real flash).
 
 ## The one step that makes it exact: capture one real flash
 Next time at a Windows machine, run the real `LT_Uart_GUI` flashing our `.bin` **with a
